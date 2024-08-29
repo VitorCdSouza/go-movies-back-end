@@ -1,6 +1,7 @@
 package main
 
 import (
+	"backend/internal/graph"
 	"backend/internal/models"
 	"encoding/json"
 	"errors"
@@ -248,7 +249,7 @@ func (app *application) getPoster(movie models.Movie) models.Movie {
 
 	client := &http.Client{}
 	theUrl := fmt.Sprintf("https://api.themoviedb.org/3/search/movie?api_key=%s", app.APIKey)
-	// 	
+	//
 
 	req, err := http.NewRequest("GET", theUrl+"&query="+url.QueryEscape(movie.Title), nil)
 	if err != nil {
@@ -318,7 +319,7 @@ func (app *application) UpdateMovie(w http.ResponseWriter, r *http.Request) {
 	}
 
 	resp := JSONResponse{
-		Error: false,
+		Error:   false,
 		Message: "movie updated",
 	}
 
@@ -339,9 +340,53 @@ func (app *application) DeleteMovie(w http.ResponseWriter, r *http.Request) {
 	}
 
 	resp := JSONResponse{
-		Error: false,
+		Error:   false,
 		Message: "movie deleted",
 	}
 
 	app.writeJSON(w, http.StatusAccepted, resp)
+}
+
+func (app *application) AllMoviesByGenre(w http.ResponseWriter, r *http.Request) {
+	id, err := strconv.Atoi(chi.URLParam(r, "id"))
+	if err != nil {
+		app.errorJSON(w, err)
+		return
+	}
+
+	movies, err := app.DB.AllMovies(id)
+	if err != nil {
+		app.errorJSON(w, err)
+		return
+	}
+
+	app.writeJSON(w, http.StatusOK, movies)
+}
+
+func (app *application) moviesGraphQL(w http.ResponseWriter, r *http.Request) {
+	// populate Graph type with movies
+	movies, _ := app.DB.AllMovies()
+
+	// get query from request
+	q, _ := io.ReadAll(r.Body)
+	query := string(q)
+
+	// create new variable of type *graph.Graph
+	g := graph.New(movies)
+
+	// set query on var
+	g.QueryString = query
+
+	// perform query
+	resp, err := g.Query()
+	if err != nil {
+		app.errorJSON(w, err)
+		return
+	}
+
+	// return response
+	j, _ := json.MarshalIndent(resp, "", "\t")
+	w.Header().Set("Content-Type", "application/json")
+	w.WriteHeader(http.StatusOK)
+	w.Write(j)
 }
